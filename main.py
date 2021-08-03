@@ -10,6 +10,8 @@ from networks.init import init_model
 import numpy as np
 import torch
 from dgl import random as dr
+from utils import evaluate
+import math
 
 def main(args):
     if args.seed!=-1:
@@ -41,12 +43,33 @@ def main(args):
         # logger.info(f'Test f1:{round(f1,4)},acc:{round(acc,4)},pre:{round(precision,4)},recall:{round(recall,4)}')
         # logger.info('\n')
     else:
-        data=dataloader.loader(args)
-        model=init_model(args,data['input_dim'])
-        if args.module != 'GAE':
-            model=trainer.train(args,logger,data,model,checkpoints_path)
-        else:
-            model=AEtrainer.train(args,logger,data,model,checkpoints_path)
+        from random import sample
+        days = 365
+        l = list(range(days))
+        training_set = sample(l, math.floor(days * 0.8))
+        val_set = [fruit for fruit in l if fruit not in training_set]
+        for index in training_set:
+            data, graph = dataloader.loader(args, index)
+            model = init_model(args, data['input_dim'])
+            input_feat = data['features']
+            input_g = data['g']
+            if args.module != 'GAE':
+                model = trainer.train(args,logger,data,model,checkpoints_path, input_feat, input_g)
+            else:
+                model = AEtrainer.train(args,logger,data,model,checkpoints_path)
+
+        for index in val_set:
+            data, graph = dataloader.loader(args, index)
+            model = init_model(args, data['input_dim'])
+            input_feat = data['features']
+            input_g = data['g']
+            data_center = init_center(args, input_g, input_feat, model)
+            radius = torch.tensor(0, device=torch.device('cpu'))  # radius R initialized with 0 by default.
+            scores = evaluate.graph_evaluate(model, data_center, data, radius)
+            with open("test/test_day{}.txt".format(index), "w") as f:
+                for line in range(len(data['g'].nodes())):
+                    f.write(str(list(graph.nodes)[line]) + "\t" + str(scores[line]) + "\n")
+
 
 
 if __name__ == '__main__':
@@ -56,7 +79,7 @@ if __name__ == '__main__':
             help="dropout probability")
     parser.add_argument("--nu", type=float, default=0.2,
             help="hyperparameter nu (must be 0 < nu <= 1)")
-    parser.add_argument("--gpu", type=int, default=0,
+    parser.add_argument("--gpu", type=int, default=-1,
             help="gpu")
     parser.add_argument("--seed", type=int, default=52,
             help="random seed, -1 means dont fix seed")
@@ -70,7 +93,7 @@ if __name__ == '__main__':
             help="learning rate")
     parser.add_argument("--normal-class", type=int, default=0,
             help="normal class")
-    parser.add_argument("--n-epochs", type=int, default=5000,
+    parser.add_argument("--n-epochs", type=int, default=1000,
             help="number of training epochs")
     parser.add_argument("--n-hidden", type=int, default=32,
             help="number of hidden gnn units")

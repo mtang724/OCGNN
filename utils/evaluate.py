@@ -28,8 +28,10 @@ def fixed_graph_evaluate(args,path,model, data_center,data,radius,mask):
 
         threshold=0
         pred=thresholding(scores,threshold)
-
-        auc=roc_auc_score(labels, scores)
+        try:
+            auc=roc_auc_score(labels, scores)
+        except:
+            auc = 0
         ap=average_precision_score(labels, scores)
 
         acc=accuracy_score(labels,pred)
@@ -132,4 +134,25 @@ def baseline_evaluate(datadict,y_pred,y_score,val=True):
     f1=f1_score(datadict['labels'][mask],y_pred)
 
     return auc,ap,f1,acc,precision,recall
+
+
+def graph_evaluate(model, data_center, data, radius):
+    model.eval()
+    with torch.no_grad():
+        labels = data['labels']
+        # loss_mask = mask.bool() & data['labels'].bool()
+
+        # test_t0 = time.time()
+        outputs = model(data['g'], data['features'])
+
+        # print(loss_mask.)
+        _, scores = anomaly_score(data_center, outputs, radius, None)
+        # test_dur = time.time()-test_t0
+        # loss, _, _ = loss_function(args.nu, data_center, outputs, radius, loss_mask)
+        # print("Test Time {:.4f}".format(test_dur))
+
+        labels = labels.cpu().numpy()
+        # dist=dist.cpu().numpy()
+        scores = scores.cpu().numpy()
+        return scores
 
